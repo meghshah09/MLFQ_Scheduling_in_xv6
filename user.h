@@ -40,3 +40,6 @@ int atoi(const char*);
 
 void enable_sched_trace(int enable);
 void shutdown(void);
+int setrunningticks(int time_allotment);//the value of RUNNING THRESHOLD to be set. The return value indicates whether this functions succeeds (i.e., 0) or not (i.e., 1).RUNNING THRESHOLD Default Value :2
+int setwaitingticks(int waiting_thres);//the value of WAITING THRESHOLD to be set. The return value indicates whether this functions succeeds (i.e., 0) or not (i.e., 1).WAITING THRESHOLD default value :4
+int setpriority(int pid, int priority);//the default priority for processes should be NON-ZERO.

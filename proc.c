@@ -16,7 +16,8 @@ static struct proc *initproc;
 
 int nextpid = 1;
 
-int sched_trace_enabled = 0; // for CS550 CPU/process project
+int sched_trace_enabled = 1; // for CS550 CPU/process project
+int sched_policy = 1;
 
 extern void forkret(void);
 extern void trapret(void);
@@ -290,7 +291,8 @@ scheduler(void)
       proc = p;
       switchuvm(p);
       p->state = RUNNING;
-      swtch(&cpu->scheduler, proc->context);
+      swtch(&cpu->scheduler, proc->context); // process will return from here when the process exits or when its quantum expires.
+	  //Quantum expires when it timer expires. it generates a trap( from trap.c)
       switchkvm();
 
       // Process is done running for now.
