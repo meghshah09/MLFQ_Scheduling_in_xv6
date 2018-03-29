@@ -101,6 +101,10 @@ extern int sys_uptime(void);
 extern int sys_enable_sched_trace(void);
 
 extern int sys_shutdown(void);
+extern int sys_setrunningticks(void);
+extern int sys_setwaitingticks(void);
+extern int sys_setpriority(void);
+
 
 static int (*syscalls[])(void) = {
 [SYS_fork]    sys_fork,
@@ -127,6 +131,9 @@ static int (*syscalls[])(void) = {
 [SYS_enable_sched_trace]   sys_enable_sched_trace,
 
 [SYS_shutdown]      sys_shutdown,
+[SYS_setrunningticks]      sys_setrunningticks,
+[SYS_setwaitingticks]      sys_setwaitingticks,
+[SYS_setpriority]      sys_setpriority,
 };
 
 void

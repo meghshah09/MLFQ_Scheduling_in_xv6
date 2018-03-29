@@ -108,3 +108,15 @@ int sys_shutdown(void)
 
   return 0;
 }
+
+int sys_setpriority(void){
+
+}
+
+int sys_setrunningticks(void){
+
+}
+
+int sys_setwaitingticks(void){
+
+}
