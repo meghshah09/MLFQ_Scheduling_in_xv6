@@ -16,8 +16,10 @@ static struct proc *initproc;
 
 int nextpid = 1;
 
-int sched_trace_enabled = 1; // for CS550 CPU/process project
-int sched_policy = 1;
+int sched_trace_enabled = 0; // for CS550 CPU/process project
+int sched_policy = 0; //default-value
+int RUNNING_THRESHOLD =2; // Default-value
+int WAITING_THRESHOLD = 4; // Default-value
 
 extern void forkret(void);
 extern void trapret(void);
@@ -269,6 +271,8 @@ wait(void)
 void
 scheduler(void)
 {
+	
+	
   struct proc *p;
   int ran = 0; // CS550: to solve the 100%-CPU-utilization-when-idling problem
 
@@ -305,6 +309,7 @@ scheduler(void)
         halt();
     }
   }
+
 }
 
 // Enter scheduler.  Must hold only ptable.lock
@@ -483,3 +488,14 @@ procdump(void)
     cprintf("\n");
   }
 }
+
+int setrunningticks(int t){
+	RUNNING_THRESHOLD = t;
+	return 0;
+}
+
+int setwaitingticks(int t){
+	WAITING_THRESHOLD = t;
+		//cprintf("WAITING_THRESHOLD : %d\n",WAITING_THRESHOLD);
+	return 0;
+} 

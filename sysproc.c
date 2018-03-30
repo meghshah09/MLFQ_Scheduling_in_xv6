@@ -110,13 +110,26 @@ int sys_shutdown(void)
 }
 
 int sys_setpriority(void){
-
+return 0;
 }
 
 int sys_setrunningticks(void){
-
+  int RUNNING_THRESHOLD;
+	if(argint(0, &RUNNING_THRESHOLD)<0){
+		return 1;
+	}
+  setrunningticks(RUNNING_THRESHOLD);
+	//cprintf("RUNNING_THRESHOLD : %d\n",RUNNING_THRESHOLD);
+	return 0;
 }
-
+extern 
 int sys_setwaitingticks(void){
 
+  int WAITING_THRESHOLD;
+	if(argint(0, &WAITING_THRESHOLD)<0){
+		return 1;
+	}
+  setwaitingticks(WAITING_THRESHOLD);
+	//cprintf("WAITING_THRESHOLD : %d\n",WAITING_THRESHOLD);
+	return 0;
 }
