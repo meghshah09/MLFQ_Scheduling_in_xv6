@@ -7,10 +7,10 @@
 #include "x86.h"
 
 static void startothers(void);
-static void mpmain(void)  __attribute__((noreturn));
+static void mpmain(void) __attribute__((noreturn));
 extern pde_t *kpgdir;
 extern char end[]; // first address after kernel loaded from ELF file
-
+void choosePolicy(void) __attribute__((noreturn)); 
 // Bootstrap processor starts running C code here.
 // Allocate a real stack and switch to it, first
 // doing some setup required for memory allocator to work.
@@ -58,8 +58,8 @@ mpmain(void)
   cprintf("cpu%d: starting\n", cpu->id);
   idtinit();       // load idt register
   xchg(&cpu->started, 1); // tell startothers() we're up
-  
-  scheduler();     // start running processes
+
+  choosePolicy();     // start running processes
 }
 
 pde_t entrypgdir[];  // For entry.S

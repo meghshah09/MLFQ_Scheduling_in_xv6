@@ -121,6 +121,8 @@ void            yield(void);
 int		setrunningticks(int);
 int		setwaitingticks(int);
 int		setpriority(int,int);
+void            choosePolicy(void);
+void       	MLFQscheduler(void);
 
 // swtch.S
 void            swtch(struct context**, struct context*);

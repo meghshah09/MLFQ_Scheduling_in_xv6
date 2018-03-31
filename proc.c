@@ -6,18 +6,23 @@
 #include "x86.h"
 #include "proc.h"
 #include "spinlock.h"
-
+#define PRIORITY_MAX 1
 struct {
   struct spinlock lock;
   struct proc proc[NPROC];
+  //Two Queues 0 and 1, associating each with priority level.
+  struct proc * queue[2][NPROC];
+  //two numbers, represnting the number of processes in each queue
+  int priCount[2];
 } ptable;
+
 
 static struct proc *initproc;
 
 int nextpid = 1;
 
 int sched_trace_enabled = 0; // for CS550 CPU/process project
-int sched_policy = 0; //default-value
+int sched_policy = 0; //default-value is told 1(MLFQ)
 int RUNNING_THRESHOLD =2; // Default-value
 int WAITING_THRESHOLD = 4; // Default-value
 
@@ -30,6 +35,8 @@ void
 pinit(void)
 {
   initlock(&ptable.lock, "ptable");
+  ptable.priCount[0] = -1;
+  ptable.priCount[1] = -1;
 }
 
 //PAGEBREAK: 32
@@ -104,7 +111,11 @@ userinit(void)
 
   safestrcpy(p->name, "initcode", sizeof(p->name));
   p->cwd = namei("/");
-
+  //Always new process is initialized to queue 0.
+  /*--------------------*/
+  ptable.priCount[0]++;
+  ptable.queue[0][ptable.priCount[0]] = p;
+  /*--------------------*/
   p->state = RUNNABLE;
 }
 
@@ -168,7 +179,8 @@ fork(void)
   acquire(&ptable.lock);
   np->state = RUNNABLE;
   release(&ptable.lock);
-  
+  ptable.priCount[0]++;
+  ptable.queue[0][ptable.priCount[0]] = np;
   return pid;
 }
 
@@ -259,7 +271,15 @@ wait(void)
     sleep(proc, &ptable.lock);  //DOC: wait-sleep
   }
 }
-
+//Chooses between two policy
+void choosePolicy(void){
+	if(sched_policy==1){
+		MLFQscheduler();
+	}
+	else if(sched_policy == 0){
+		scheduler();
+	}
+}
 //PAGEBREAK: 42
 // Per-CPU process scheduler.
 // Each CPU calls scheduler() after setting itself up.
@@ -271,11 +291,8 @@ wait(void)
 void
 scheduler(void)
 {
-	
-	
-  struct proc *p;
+	struct proc *p;
   int ran = 0; // CS550: to solve the 100%-CPU-utilization-when-idling problem
-
   for(;;){
     // Enable interrupts on this processor.
     sti();
@@ -308,10 +325,45 @@ scheduler(void)
     if (ran == 0){
         halt();
     }
-  }
 
+  }
 }
 
+//MLFQScheduler
+void MLFQscheduler(void){
+		struct proc *p;
+  int ran = 0; // CS550: to solve the 100%-CPU-utilization-when-idling problem
+  for(;;){
+    // Enable interrupts on this processor.
+    sti();
+
+    // Loop over process table looking for process to run.
+    acquire(&ptable.lock);
+    ran = 0;
+    int priority;
+        for(priority = 0; priority <= PRIORITY_MAX; priority++) {
+            while(ptable.priCount[priority] > -1) {
+                proc = ptable.que[priority][0];
+                int i;
+                for (i = 0; i < ptable.priCount[priority]; i++) {
+                    ptable.que[priority][i] = ptable.que[priority][i + 1];
+                }
+                ptable.priCount[priority]--;
+                switchuvm(proc);
+                proc->state = RUNNING;
+                swtch(&cpu->scheduler, proc->context);
+                switchkvm();
+                proc = 0;
+                priority = 0;
+            }
+        }
+    release(&ptable.lock);
+
+    if (ran == 0){
+        halt();
+    }
+  }
+}
 // Enter scheduler.  Must hold only ptable.lock
 // and have changed proc->state.
 void
@@ -498,4 +550,4 @@ int setwaitingticks(int t){
 	WAITING_THRESHOLD = t;
 		//cprintf("WAITING_THRESHOLD : %d\n",WAITING_THRESHOLD);
 	return 0;
-} 
+}
