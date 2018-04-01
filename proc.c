@@ -6,7 +6,9 @@
 #include "x86.h"
 #include "proc.h"
 #include "spinlock.h"
+
 #define PRIORITY_MAX 1
+
 struct {
   struct spinlock lock;
   struct proc proc[NPROC];
@@ -21,10 +23,11 @@ static struct proc *initproc;
 
 int nextpid = 1;
 
-int sched_trace_enabled = 0; // for CS550 CPU/process project
-int sched_policy = 0; //default-value is told 1(MLFQ)
+int sched_trace_enabled = 1; // for CS550 CPU/process project
+int sched_policy = 1; //default-value is told 1(MLFQ)
 int RUNNING_THRESHOLD =2; // Default-value
 int WAITING_THRESHOLD = 4; // Default-value
+int init=0;
 
 extern void forkret(void);
 extern void trapret(void);
@@ -36,7 +39,7 @@ pinit(void)
 {
   initlock(&ptable.lock, "ptable");
   ptable.priCount[0] = -1;
-  ptable.priCount[1] = -1;
+  ptable.priCount[1] = -1;// No processes
 }
 
 //PAGEBREAK: 32
@@ -60,6 +63,7 @@ allocproc(void)
 found:
   p->state = EMBRYO;
   p->pid = nextpid++;
+  p->priority =0;
   release(&ptable.lock);
 
   // Allocate kernel stack.
@@ -177,10 +181,11 @@ fork(void)
 
   // lock to force the compiler to emit the np->state write last.
   acquire(&ptable.lock);
-  np->state = RUNNABLE;
-  release(&ptable.lock);
+  
   ptable.priCount[0]++;
   ptable.queue[0][ptable.priCount[0]] = np;
+  np->state = RUNNABLE;
+  release(&ptable.lock);
   return pid;
 }
 
@@ -319,6 +324,8 @@ scheduler(void)
       // Process is done running for now.
       // It should have changed its p->state before coming back.
       proc = 0;
+	  
+
     }
     release(&ptable.lock);
 
@@ -331,38 +338,44 @@ scheduler(void)
 
 //MLFQScheduler
 void MLFQscheduler(void){
+		cprintf("In MLFQ Scheduler\n");
+		int ran= 0;
 		struct proc *p;
-  int ran = 0; // CS550: to solve the 100%-CPU-utilization-when-idling problem
-  for(;;){
-    // Enable interrupts on this processor.
-    sti();
-
-    // Loop over process table looking for process to run.
-    acquire(&ptable.lock);
-    ran = 0;
-    int priority;
-        for(priority = 0; priority <= PRIORITY_MAX; priority++) {
+		for(;;){
+        // Enable interrupts on this processor.
+        sti();
+		
+        // Loop over process table looking for process to run.
+        acquire(&ptable.lock);
+        int priority;
+		ran =0;
+    for(priority = 0; priority <= 1; priority++) {
+			//cprintf("ptable.priCount[priority]: %d\n",ptable.priCount[priority]);
             while(ptable.priCount[priority] > -1) {
-                proc = ptable.que[priority][0];
+                p = ptable.queue[priority][0];
                 int i;
                 for (i = 0; i < ptable.priCount[priority]; i++) {
-                    ptable.que[priority][i] = ptable.que[priority][i + 1];
+                    ptable.queue[priority][i] = ptable.queue[priority][i + 1];
                 }
+			
+				ran=1;
+				proc =p;
                 ptable.priCount[priority]--;
-                switchuvm(proc);
-                proc->state = RUNNING;
+                switchuvm(p);
+                p->state = RUNNING;
+				//cprintf("Process : %d\n",p->pid);
                 swtch(&cpu->scheduler, proc->context);
                 switchkvm();
                 proc = 0;
-                priority = 0;
+				priority = 0;
             }
         }
-    release(&ptable.lock);
 
-    if (ran == 0){
-        halt();
+        release(&ptable.lock);
+		if (ran == 0){
+			halt();
+		}
     }
-  }
 }
 // Enter scheduler.  Must hold only ptable.lock
 // and have changed proc->state.
@@ -383,9 +396,10 @@ sched(void)
 
   // CS550: print previously running process
   // We skip process 1 (init) and 2 (shell)
-  if ( sched_trace_enabled &&
-	proc && proc->pid != 1 && proc->pid != 2)
-        cprintf("[%d]", proc->pid);
+  if ( sched_trace_enabled && proc && proc->pid != 1 && proc->pid != 2){
+	cprintf("[%d]", proc->pid);
+  }
+
 
   swtch(&proc->context, cpu->scheduler);
   cpu->intena = intena;
@@ -396,6 +410,10 @@ void
 yield(void)
 {
   acquire(&ptable.lock);  //DOC: yieldlock
+  if (proc->priority < 1)
+    proc->priority++;
+  ptable.priCount[proc->priority]++;
+  ptable.queue[proc->priority][ptable.priCount[proc->priority]] = proc;
   proc->state = RUNNABLE;
   sched();
   release(&ptable.lock);
@@ -468,8 +486,11 @@ wakeup1(void *chan)
   struct proc *p;
 
   for(p = ptable.proc; p < &ptable.proc[NPROC]; p++)
-    if(p->state == SLEEPING && p->chan == chan)
-      p->state = RUNNABLE;
+    if(p->state == SLEEPING && p->chan == chan){
+	ptable.priCount[p->priority]++;
+    ptable.queue[p->priority][ptable.priCount[p->priority]] = p;
+	p->state = RUNNABLE;
+	}
 }
 
 // Wake up all processes sleeping on chan.
@@ -494,8 +515,11 @@ kill(int pid)
     if(p->pid == pid){
       p->killed = 1;
       // Wake process from sleep if necessary.
-      if(p->state == SLEEPING)
-        p->state = RUNNABLE;
+      if(p->state == SLEEPING){
+		ptable.priCount[p->priority]++;
+        ptable.queue[p->priority][ptable.priCount[p->priority]] = p;
+		p->state = RUNNABLE;
+	  }
       release(&ptable.lock);
       return 0;
     }
@@ -531,7 +555,7 @@ procdump(void)
       state = states[p->state];
     else
       state = "???";
-    cprintf("%d %s %s", p->pid, state, p->name);
+    cprintf("%d %s %s priority:%d", p->pid, state, p->name, p->priority);
     if(p->state == SLEEPING){
       getcallerpcs((uint*)p->context->ebp+2, pc);
       for(i=0; i<10 && pc[i] != 0; i++)
@@ -551,3 +575,14 @@ int setwaitingticks(int t){
 		//cprintf("WAITING_THRESHOLD : %d\n",WAITING_THRESHOLD);
 	return 0;
 }
+
+int setpriority(int p_id, int pri){
+	struct proc * p;
+	for(p = ptable.proc; p < &ptable.proc[NPROC]; p++){
+		if(p->pid == p_id){
+			p->priority = pri;
+		}
+	}
+	return 0;
+}
+

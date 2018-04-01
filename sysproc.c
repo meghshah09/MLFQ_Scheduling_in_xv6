@@ -110,6 +110,16 @@ int sys_shutdown(void)
 }
 
 int sys_setpriority(void){
+int priority;
+int pid;
+	if(argint(0, &pid)<0){
+		return 1;
+	}
+	if(argint(1, &priority)<0){
+		return 1;
+	}
+	
+	setpriority(pid,priority);
 return 0;
 }
 
