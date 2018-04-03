@@ -132,7 +132,7 @@ int sys_setrunningticks(void){
 	//cprintf("RUNNING_THRESHOLD : %d\n",RUNNING_THRESHOLD);
 	return 0;
 }
-extern 
+
 int sys_setwaitingticks(void){
 
   int WAITING_THRESHOLD;

@@ -20,7 +20,7 @@ struct {
 
 
 static struct proc *initproc;
-
+extern uint ticks;
 int nextpid = 1;
 
 int sched_trace_enabled = 1; // for CS550 CPU/process project
@@ -63,7 +63,9 @@ allocproc(void)
 found:
   p->state = EMBRYO;
   p->pid = nextpid++;
-  p->priority =0;
+  p->priority = 0;
+  p->running_ticks = 0;
+  p->waiting_ticks = 0;
   release(&ptable.lock);
 
   // Allocate kernel stack.
@@ -86,7 +88,8 @@ found:
   p->context = (struct context*)sp;
   memset(p->context, 0, sizeof *p->context);
   p->context->eip = (uint)forkret;
-
+	
+  
   return p;
 }
 
@@ -353,6 +356,7 @@ void MLFQscheduler(void){
 			//cprintf("ptable.priCount[priority]: %d\n",ptable.priCount[priority]);
             while(ptable.priCount[priority] > -1) {
                 p = ptable.queue[priority][0];
+				//cprintf("PID: %d\t Running_ticks: %d\n",p->pid,p->running_ticks);
                 int i;
                 for (i = 0; i < ptable.priCount[priority]; i++) {
                     ptable.queue[priority][i] = ptable.queue[priority][i + 1];
@@ -360,11 +364,19 @@ void MLFQscheduler(void){
 			
 				ran=1;
 				proc =p;
-                ptable.priCount[priority]--;
+                
                 switchuvm(p);
                 p->state = RUNNING;
 				//cprintf("Process : %d\n",p->pid);
+				p->running_ticks++;
+				if(p->running_ticks == RUNNING_THRESHOLD && priority==0 && p->pid !=1 && p->pid!=2){ //Demotion
+					p->priority =1;
+					ptable.queue[1][++ptable.priCount[1]]= p;
+				}
+				ptable.priCount[priority]--;
+				//cprintf("PID: %d\t Running_ticks: %d\n",p->pid,p->running_ticks);
                 swtch(&cpu->scheduler, proc->context);
+                
                 switchkvm();
                 proc = 0;
 				priority = 0;
@@ -399,7 +411,8 @@ sched(void)
   if ( sched_trace_enabled && proc && proc->pid != 1 && proc->pid != 2){
 	cprintf("[%d]", proc->pid);
   }
-
+  
+	//cprintf("Total Queue 0 Process : %d\n",ptable.priCount[0]);
 
   swtch(&proc->context, cpu->scheduler);
   cpu->intena = intena;
@@ -410,8 +423,8 @@ void
 yield(void)
 {
   acquire(&ptable.lock);  //DOC: yieldlock
-  if (proc->priority < 1)
-    proc->priority++;
+  /*if (proc->priority < 1)
+    proc->priority++;*/
   ptable.priCount[proc->priority]++;
   ptable.queue[proc->priority][ptable.priCount[proc->priority]] = proc;
   proc->state = RUNNABLE;
@@ -567,6 +580,8 @@ procdump(void)
 
 int setrunningticks(int t){
 	RUNNING_THRESHOLD = t;
+	//cprintf("RUNNING_THRESHOLD : %d\n",RUNNING_THRESHOLD);
+	
 	return 0;
 }
 
