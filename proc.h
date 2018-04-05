@@ -70,6 +70,7 @@ struct proc {
   int running_ticks;           // Running tick counter for process in queue 0
   int waiting_ticks;           // Waiting tick counter for process in queue 1
   int queueNumber;             // Tells the queue Number of Process in which its residing.
+  int pinned;                  // Tells whether a particular process is pinned or not.
 };
 
 // Process memory is laid out contiguously, low addresses first:

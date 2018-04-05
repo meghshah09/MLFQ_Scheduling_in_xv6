@@ -66,7 +66,7 @@ found:
   p->priority = 0;
   p->running_ticks = 0;
   p->waiting_ticks = 0;
-
+  p->pinned = 1; //Non-Zero Value indicating normal scheduling policy.
   release(&ptable.lock);
 
   // Allocate kernel stack.
@@ -397,29 +397,36 @@ void MLFQscheduler(void){
         		 p = ptable.queue[qNumber][0];
 				//cprintf("PID: %d\t Running_ticks: %d\n",p->pid,p->running_ticks);
                 int i;
+                int l= 0; // indicates which process is selected to schedule
                 struct proc *p1;
                 for (i = 1; i < ptable.priCount[qNumber]; i++) {
                 		p1 = ptable.queue[qNumber][i];
                     	if(p->priority < p1->priority){
                     		//Schedule this process
                     		p = ptable.queue[qNumber][i];
+                    		l=i;
                     	}
                 }
                 int j;
-                for(j=i;j<ptable.priCount[qNumber];j++){
+                for(j=l;j<ptable.priCount[qNumber];j++){
                 	ptable.queue[qNumber][j] = ptable.queue[qNumber][j+1];
                 }
 			
 				
                 ptable.priCount[qNumber]--;
                 p->running_ticks =0;
+                
+                struct proc *p2;
                 int k;
   				for(k=0;k<ptable.priCount[1];k++){
-  					p = ptable.queue[1][k];
-  					p->waiting_ticks++;
-  					p->priority = p->waiting_ticks;
-  					ptable.queue[1][k] = p;
+  					if(k!=l){
+  						p2 = ptable.queue[1][k];
+  						p2->waiting_ticks++;
+  						p2->priority = p->waiting_ticks;
+  						ptable.queue[1][k] = p2;
+  					}
   				}
+  				
                 ran=1;
 				proc =p;
                 switchuvm(p);
@@ -432,10 +439,14 @@ void MLFQscheduler(void){
                 //we also need to increase the waiting tick of processes in Queue one that were not scheduled
                 //printf("Scheduling done\n");
                 proc = 0;
-				qNumber = 0;
-
+                qNumber =0;
+                /*if(ptable.priCount[0]!=-1) // meaning queue 0 contains process
+					qNumber = 0;
+				else //Queue 0 does not contains process.
+					qNumber = 1;*/
 				
-        	
+        		p1=0;
+        		p2=0;
         	}
         }
         }
@@ -473,8 +484,11 @@ sched(void)
 	//cprintf("Total Queue 0 Process : %d\n",ptable.priCount[0]);
   
   	
-if(proc->pid != 1 && proc->pid != 2 && proc->queueNumber ==0)
-	proc->running_ticks++;
+if(proc->pid != 1 && proc->pid != 2 && proc->queueNumber == 0){
+	if(proc->pinned != 0)
+		proc->running_ticks++;
+}
+	
   swtch(&proc->context, cpu->scheduler);
   cpu->intena = intena;
 }
@@ -495,7 +509,7 @@ yield(void)
 	}
 
 	if(proc->running_ticks == RUNNING_THRESHOLD && proc->queueNumber==0 && proc->pid !=1 && proc->pid!=2){ //Demotion
-		proc->priority = 0;
+		//proc->priority = 0;
 		proc->waiting_ticks =0;
 		proc->running_ticks = 0;
 		proc->queueNumber =1;
@@ -671,12 +685,37 @@ int setwaitingticks(int t){
 }
 
 int setpriority(int p_id, int pri){
-	struct proc * p;
-	for(p = ptable.proc; p < &ptable.proc[NPROC]; p++){
-		if(p->pid == p_id){
-			p->priority = pri;
+	struct proc * p3;
+	int found = 0;
+	acquire(&ptable.lock);
+	for(int i=0;i<=1;i++){
+		for(int j=0;j<ptable.priCount[i];j++){
+			p3 = ptable.queue[i][j];
+			if(p3->pid == p_id){
+				if(p3->pinned != 0 && pri == 0){ //pinned to queue 0
+					ptable.priCount[p3->queueNumber]--;
+					p3->queueNumber = 0;
+					p3->waiting_ticks = 0;
+					p3->running_ticks = 0;
+					p3->pinned = pri;
+					ptable.priCount[0]++;
+					ptable.queue[0][ptable.priCount[0]] = p3;
+				}
+				else if(p3->pinned == 0 && pri != 0){ //unpinned from queue 0
+					p3->pinned = pri;
+				}
+				else{
+					p3->pinned = pri;
+				}
+					found=1;
+					break;
+			}
 		}
+		if(found == 1)
+			break;
 	}
+	p3 =0;
+	release(&ptable.lock);
 	return 0;
 }
 
