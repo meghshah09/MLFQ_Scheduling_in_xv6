@@ -20,7 +20,7 @@ struct {
 
 
 static struct proc *initproc;
-extern uint ticks;
+
 int nextpid = 1;
 
 int sched_trace_enabled = 1; // for CS550 CPU/process project
@@ -66,6 +66,7 @@ found:
   p->priority = 0;
   p->running_ticks = 0;
   p->waiting_ticks = 0;
+
   release(&ptable.lock);
 
   // Allocate kernel stack.
@@ -120,6 +121,7 @@ userinit(void)
   p->cwd = namei("/");
   //Always new process is initialized to queue 0.
   /*--------------------*/
+  p->queueNumber = 0;
   ptable.priCount[0]++;
   ptable.queue[0][ptable.priCount[0]] = p;
   /*--------------------*/
@@ -184,7 +186,7 @@ fork(void)
 
   // lock to force the compiler to emit the np->state write last.
   acquire(&ptable.lock);
-  
+  np->queueNumber = 0;
   ptable.priCount[0]++;
   ptable.queue[0][ptable.priCount[0]] = np;
   np->state = RUNNABLE;
@@ -344,43 +346,98 @@ void MLFQscheduler(void){
 		cprintf("In MLFQ Scheduler\n");
 		int ran= 0;
 		struct proc *p;
+		int qNumber;
 		for(;;){
         // Enable interrupts on this processor.
         sti();
 		
         // Loop over process table looking for process to run.
         acquire(&ptable.lock);
-        int priority;
+        
 		ran =0;
-    for(priority = 0; priority <= 1; priority++) {
-			//cprintf("ptable.priCount[priority]: %d\n",ptable.priCount[priority]);
-            while(ptable.priCount[priority] > -1) {
-                p = ptable.queue[priority][0];
+    for(qNumber = 0; qNumber <= 1; qNumber++) {
+			//cprintf("ptable.priCount[qNumber]: %d\n",ptable.priCount[qNumber]);
+    		//cprintf("%d\n",qNumber);
+    		if(qNumber == 0){ // Queue 0 is Round Robin Scheduling
+            while(ptable.priCount[qNumber] > -1) {
+                p = ptable.queue[qNumber][0];
 				//cprintf("PID: %d\t Running_ticks: %d\n",p->pid,p->running_ticks);
                 int i;
-                for (i = 0; i < ptable.priCount[priority]; i++) {
-                    ptable.queue[priority][i] = ptable.queue[priority][i + 1];
+                for (i = 0; i < ptable.priCount[qNumber]; i++) {
+                    ptable.queue[qNumber][i] = ptable.queue[qNumber][i + 1];
                 }
 			
 				ran=1;
+				ptable.priCount[qNumber]--;
+				
+				
+				p->priority = 0;
 				proc =p;
                 
                 switchuvm(p);
                 p->state = RUNNING;
-				//cprintf("Process : %d\n",p->pid);
-				p->running_ticks++;
-				if(p->running_ticks == RUNNING_THRESHOLD && priority==0 && p->pid !=1 && p->pid!=2){ //Demotion
-					p->priority =1;
-					ptable.queue[1][++ptable.priCount[1]]= p;
-				}
-				ptable.priCount[priority]--;
+				//cprintf("Process : %d\n",proc->pid);
+				//p->running_ticks++;
+				
+				
+				//cprintf("PID: %d\t Running_ticks: %d\n",proc->pid,proc->running_ticks);
+				
+                swtch(&cpu->scheduler, proc->context);
+                
+                switchkvm();
+                
+                proc = 0;
+                //cprintf("Scheduling done\n");
+				qNumber = 0;
+				
+            }
+        }//end of if
+        else if(qNumber == 1){ // Queue 1 is priority based scheduling
+        	while(ptable.priCount[qNumber] > -1){
+        		 p = ptable.queue[qNumber][0];
+				//cprintf("PID: %d\t Running_ticks: %d\n",p->pid,p->running_ticks);
+                int i;
+                struct proc *p1;
+                for (i = 1; i < ptable.priCount[qNumber]; i++) {
+                		p1 = ptable.queue[qNumber][i];
+                    	if(p->priority < p1->priority){
+                    		//Schedule this process
+                    		p = ptable.queue[qNumber][i];
+                    	}
+                }
+                int j;
+                for(j=i;j<ptable.priCount[qNumber];j++){
+                	ptable.queue[qNumber][j] = ptable.queue[qNumber][j+1];
+                }
+			
+				
+                ptable.priCount[qNumber]--;
+                p->running_ticks =0;
+                int k;
+  				for(k=0;k<ptable.priCount[1];k++){
+  					p = ptable.queue[1][k];
+  					p->waiting_ticks++;
+  					p->priority = p->waiting_ticks;
+  					ptable.queue[1][k] = p;
+  				}
+                ran=1;
+				proc =p;
+                switchuvm(p);
+                p->state = RUNNING;
+                
 				//cprintf("PID: %d\t Running_ticks: %d\n",p->pid,p->running_ticks);
                 swtch(&cpu->scheduler, proc->context);
                 
                 switchkvm();
+                //we also need to increase the waiting tick of processes in Queue one that were not scheduled
+                //printf("Scheduling done\n");
                 proc = 0;
-				priority = 0;
-            }
+				qNumber = 0;
+
+				
+        	
+        	}
+        }
         }
 
         release(&ptable.lock);
@@ -408,12 +465,16 @@ sched(void)
 
   // CS550: print previously running process
   // We skip process 1 (init) and 2 (shell)
+  //cprintf("PID: %d\t Running_ticks: %d\n",proc->pid,proc->running_ticks);
   if ( sched_trace_enabled && proc && proc->pid != 1 && proc->pid != 2){
 	cprintf("[%d]", proc->pid);
   }
   
 	//cprintf("Total Queue 0 Process : %d\n",ptable.priCount[0]);
-
+  
+  	
+if(proc->pid != 1 && proc->pid != 2 && proc->queueNumber ==0)
+	proc->running_ticks++;
   swtch(&proc->context, cpu->scheduler);
   cpu->intena = intena;
 }
@@ -422,13 +483,31 @@ sched(void)
 void
 yield(void)
 {
+  //cprintf("Into yield.\n");	
   acquire(&ptable.lock);  //DOC: yieldlock
-  /*if (proc->priority < 1)
-    proc->priority++;*/
-  ptable.priCount[proc->priority]++;
-  ptable.queue[proc->priority][ptable.priCount[proc->priority]] = proc;
+  if(proc->waiting_ticks == WAITING_THRESHOLD && proc->queueNumber==1){ //promotion to queue 0.
+		//proc->priority =0;
+		proc->waiting_ticks = 0;
+		proc->running_ticks =0;
+		proc->queueNumber = 0;
+		ptable.priCount[0]++;
+		ptable.queue[0][ptable.priCount[0]]= proc;				
+	}
+
+	if(proc->running_ticks == RUNNING_THRESHOLD && proc->queueNumber==0 && proc->pid !=1 && proc->pid!=2){ //Demotion
+		proc->priority = 0;
+		proc->waiting_ticks =0;
+		proc->running_ticks = 0;
+		proc->queueNumber =1;
+		ptable.priCount[1]++;
+		ptable.queue[1][ptable.priCount[1]]= proc;
+	}
+  ptable.priCount[proc->queueNumber]++;
+  ptable.queue[proc->queueNumber][ptable.priCount[proc->queueNumber]] = proc;
   proc->state = RUNNABLE;
+  
   sched();
+  //cprintf("Sched done\n");
   release(&ptable.lock);
 }
 
@@ -500,8 +579,8 @@ wakeup1(void *chan)
 
   for(p = ptable.proc; p < &ptable.proc[NPROC]; p++)
     if(p->state == SLEEPING && p->chan == chan){
-	ptable.priCount[p->priority]++;
-    ptable.queue[p->priority][ptable.priCount[p->priority]] = p;
+	ptable.priCount[p->queueNumber]++;
+    ptable.queue[p->queueNumber][ptable.priCount[p->queueNumber]] = p;
 	p->state = RUNNABLE;
 	}
 }
@@ -528,9 +607,9 @@ kill(int pid)
     if(p->pid == pid){
       p->killed = 1;
       // Wake process from sleep if necessary.
-      if(p->state == SLEEPING){
-		ptable.priCount[p->priority]++;
-        ptable.queue[p->priority][ptable.priCount[p->priority]] = p;
+      if(p->state == SLEEPING ){
+		ptable.priCount[p->queueNumber]++;
+        ptable.queue[p->queueNumber][ptable.priCount[p->queueNumber]] = p;
 		p->state = RUNNABLE;
 	  }
       release(&ptable.lock);
