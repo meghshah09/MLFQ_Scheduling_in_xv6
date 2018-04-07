@@ -358,110 +358,140 @@ void MLFQscheduler(void){
         // Loop over process table looking for process to run.
         acquire(&ptable.lock);
         
-    ran =0;
-    for(qNumber = 0; qNumber <= 1; qNumber++) {
-      //cprintf("ptable.priCount[qNumber]: %d\n",ptable.priCount[qNumber]);
-        //cprintf("%d\n",qNumber);
-        if(qNumber == 0){ // Queue 0 is Round Robin Scheduling
 
-            while(ptable.priCount[qNumber] > -1) {
-              //if(p->state != RUNNABLE && p->pid > 2 )continue;
-                p = ptable.queue[qNumber][0];
-        //cprintf("PID: %d\t Running_ticks: %d\n",p->pid,p->running_ticks);
+
+
+        ran =0;
+        qNumber =0;
+        for(qNumber = 0; qNumber <=1; qNumber++){
+
+            while(ptable.priCount[qNumber]>-1){
+            int index;
+              for(index =0;index<=ptable.priCount[qNumber];index++){
+                p = ptable.queue[qNumber][index];
+                if(p->state!=RUNNABLE)
+                  continue;
+                else
+                  break;
+              }
+
+              if(p->queueNumber == 0){
                 int i;
-                for (i = 0; i < ptable.priCount[qNumber]; i++) {
+                for (i = index; i < ptable.priCount[qNumber]; i++) {
                     ptable.queue[qNumber][i] = ptable.queue[qNumber][i + 1];
                 }
-      
-        ran=1;
-        ptable.priCount[qNumber]--;
+                ran=1;
+                ptable.priCount[qNumber]--;
+                /*-------------------------- increasing waiting ticks for process in queue 1-------------*/
+                struct proc *p0; 
+                for(int k =0;k<=ptable.priCount[1];k++){
+                    p0 = ptable.queue[1][k];
+                    if(p0->state == RUNNABLE){
+                      p0->waiting_ticks++;
+                      p0->priority = p0->waiting_ticks;
+                      ptable.queue[1][k] = p0;
+                    }
+                }
+                /*----------------------------------------------------------------------------------------*/
+                p->priority = 0;
         
-        
-        p->priority = 0;
-        if(p->pid != 1 && p->pid != 2 && p->queueNumber == 0 && p->pinned != 0){
-            p->running_ticks++;
-        }
-        proc =p;
+                proc =p;
                 
-                switchuvm(proc);
+                switchuvm(p);
                 p->state = RUNNING;
-        //cprintf("Process : %d\n",proc->pid);
-        //p->running_ticks++;
+                //cprintf("Process : %d\n",proc->pid);
+                //p->running_ticks++;
         
         
-        //cprintf("PID: %d\t Running_ticks: %d\n",proc->pid,proc->running_ticks);
-        
+                //cprintf("PID: %d\t Running_ticks: %d\n",proc->pid,proc->running_ticks);
+                //cprintf("HELLO\n");
                 swtch(&cpu->scheduler, proc->context);
                 
                 switchkvm();
                 
                 proc = 0;
-                //cprintf("Scheduling done\n");
-                qNumber = 0;
-        
-            }
-        }//end of if
-        else if(qNumber == 1){ // Queue 1 is priority based scheduling
-          while(ptable.priCount[qNumber] > -1){
-             p = ptable.queue[qNumber][0];
-             
-        //cprintf("PID: %d\t Running_ticks: %d\n",p->pid,p->running_ticks);
-                int i;
-                int l= 0; // indicates which process is selected to schedule
-                struct proc *p1;
-                for (i = 1; i < ptable.priCount[qNumber]; i++) {
-                    p1 = ptable.queue[qNumber][i];
-                      if(p->priority > p1->priority){ 
-                        //Schedule this process
-                        p = p1;
-                        l=i;
-                      }
-                }
-                
-                int j;
-                for(j=l;j<ptable.priCount[qNumber];j++){
-                  ptable.queue[qNumber][j] = ptable.queue[qNumber][j+1];
-                }
 
-                struct proc *p2;
-                int k;
-          for(k=0;k<ptable.priCount[1];k++){
-          	p2 = ptable.queue[1][k];
-            if(p!=p2){
-            p2->priority = p->waiting_ticks;
-              p2->waiting_ticks++;
-              
-              ptable.queue[1][k] = p2;
-            }
-          }
-          ptable.priCount[qNumber]--;
-                p->running_ticks =0;
+              }
+              else if(p->queueNumber == 1){
+
+                //cprintf("I am Here\n");
+                struct proc *p1=0;
+                int ind=index;
+                for(int f = 0;f<=ptable.priCount[1];f++){
+                  p1 =ptable.queue[1][f];
+                  if(p1!=p && p1->state == RUNNABLE){
+                    //if(p1->priority >= p->priority){
+
+                      /*if(p->priority == p1->priority){
+                        ind= index;
+                      }
+                      else */if(p->priority < p1->priority){
+                        p=p1;
+                        ind= f;
+                      }
+                      
+                    //}//second if
+
+
+                  }//first if
+
+                }//for loop
+
+                for(int f =ind;f< ptable.priCount[1];f++){
+                  ptable.queue[1][f] = ptable.queue[1][f+1];
+                }
+                ptable.priCount[p->queueNumber]--;
+
+                //waiting ticks incrementing
+                //struct proc *p2;
+                /*for(int f=0; f<ptable.priCount[1];f++){
+                    p2 = ptable.queue[1][f];
+                    if(p!=p2){
+                      p2->waiting_ticks++;
+                      p2->priority = p2->waiting_ticks;
+                      ptable.queue[1][f] = p2;
+                      //cprintf("PID :[%d] and Waiting ticks [%d]\n",p2->pid,p2->waiting_ticks);
+                    }
+                }*/
+                 struct proc *p2=0;
+                 for(p2 = ptable.proc; p2 < &ptable.proc[NPROC]; p2++){
+                  if(p2->state != RUNNABLE && p2->queueNumber != 1)
+                    continue;
+                  else{
+                      if(p != p2){
+                        p2->waiting_ticks++;
+                        p2->priority = p2->waiting_ticks;
+                      }
+                    //cprintf("PID :[%d] and Wait[%d] , ",p2->pid,p2->waiting_ticks);  
+                  }
+                 }
+
                 ran=1;
                 proc =p;
                 switchuvm(p);
                 p->state = RUNNING;
                 
-        //cprintf("PID: %d\t Running_ticks: %d\n",p->pid,p->running_ticks);
+                //cprintf("PID: %d\t Running_ticks: %d\n",p->pid,p->running_ticks);
                 swtch(&cpu->scheduler, proc->context);
                 
                 switchkvm();
                 //we also need to increase the waiting tick of processes in Queue one that were not scheduled
                 //printf("Scheduling done\n");
                 proc = 0;
-                if(ptable.priCount[0]!=-1){ // meaning queue 0 contains process
-          			   qNumber = 0;
-      				    break;
-      			   }
-              else //Queue 0 does not contains process.
-                qNumber = 1;
-        
-            p1=0;
-            p2=0;
-          }
-        }
+                p1=0;
+                p2=0;
+              }//else if end
+
+
+            }
+          
         }
 
-        release(&ptable.lock);
+
+
+
+
+    release(&ptable.lock);
     if (ran == 0){
       halt();
     }
@@ -495,10 +525,21 @@ sched(void)
   // CS550: print previously running process
   // We skip process 1 (init) and 2 (shell)
   //cprintf("PID: %d\t Running_ticks: %d\n",proc->pid,proc->running_ticks);
-  if ( sched_trace_enabled && proc && proc->pid != 1 && proc->pid != 2){
-  cprintf("[%d]", proc->pid);
-  }
+  
   //cprintf("Total Queue 0 Process : %d\n",ptable.priCount[0]);
+  if(proc->pid != 1 && proc->pid != 2 && proc->queueNumber == 0 && proc->pinned != 0){
+            proc->running_ticks++;
+  }
+
+  if(proc->pid != 1 && proc->pid != 2 && proc->queueNumber == 1 && proc->pinned != 0){
+
+  }
+
+  if ( sched_trace_enabled && proc && proc->pid != 1 && proc->pid != 2){
+      cprintf("[%d]", proc->pid);
+  }
+  //cprintf("Hi\n");
+  
   swtch(&proc->context, cpu->scheduler);
   cpu->intena = intena;
 }
@@ -514,22 +555,23 @@ yield(void)
     proc->waiting_ticks = 0;
     proc->running_ticks =0;
     proc->queueNumber = 0;
-    ptable.priCount[0]++;
-    ptable.queue[0][ptable.priCount[0]]= proc;        
+    //ptable.priCount[0]++;
+    //ptable.queue[0][ptable.priCount[0]]= proc;        
   }
 
   if(proc->running_ticks == RUNNING_THRESHOLD && proc->queueNumber==0 && proc->pid !=1 && proc->pid!=2){ //Demotion
+    cprintf("Demoting process : %d\n",proc->pid);
     proc->priority = 0;
     proc->waiting_ticks =0;
     proc->running_ticks = 0;
     proc->queueNumber =1;
-    ptable.priCount[1]++;
-    ptable.queue[1][ptable.priCount[1]]= proc;
+    //ptable.priCount[1]++;
+    //ptable.queue[1][ptable.priCount[1]]= proc;
   }
   ptable.priCount[proc->queueNumber]++;
   ptable.queue[proc->queueNumber][ptable.priCount[proc->queueNumber]] = proc;
   proc->state = RUNNABLE;
-  
+  //cprintf("hey\n");
   sched();
   //cprintf("Sched done\n");
   release(&ptable.lock);
@@ -603,7 +645,7 @@ wakeup1(void *chan)
 
   for(p = ptable.proc; p < &ptable.proc[NPROC]; p++)
     if(p->state == SLEEPING && p->chan == chan){
-  ptable.priCount[p->queueNumber]++;
+    ptable.priCount[p->queueNumber]++;
     ptable.queue[p->queueNumber][ptable.priCount[p->queueNumber]] = p;
   p->state = RUNNABLE;
   }
@@ -695,50 +737,37 @@ int setwaitingticks(int t){
 }
 
 int setpriority(int p_id, int pri){
-  struct proc *p3;
-  int found = 0;
+  
   acquire(&ptable.lock);
-  for(int i=0;i<=1;i++){
-    for(int j=0;j<NPROC;j++){
-      p3 = ptable.queue[i][j];
-      if(p3->pid == p_id){
-        if(p3->pinned != 0 && pri == 0){ //pinned to queue 0
-        	if(p3->queueNumber == 1){
-	          ptable.priCount[p3->queueNumber]--;
-	          p3->queueNumber = 0;
-	          p3->waiting_ticks = 0;
-	          p3->running_ticks = 0;
-	          p3->priority = 0 ;
-	          p3->pinned = pri;
-	          ptable.priCount[0]++;
-	          ptable.queue[0][ptable.priCount[0]] = p3;
-      		}
-      		else{
-      			p3->running_ticks = 0;
-	          	p3->pinned = pri;
-	          	ptable.queue[i][j] = p3;
-      		}
+      if(proc->pid == p_id){
+        //cprintf("I found it\n");
+        if(proc->pinned !=0 && pri ==0){
+          if(proc->queueNumber ==0){
+
+            proc->pinned = pri;
+            proc->running_ticks =0;
+            proc->waiting_ticks = 0;
+            //ptable.queue[proc->queueNumber][ptable.priCount[proc->queueNumber]] = proc;
+
+          }
+          else if (proc->queueNumber == 1){
+            ptable.priCount[proc->queueNumber]--;
+            proc->pinned = pri;
+            proc->running_ticks =0;
+            proc->waiting_ticks = 0;
+            proc->queueNumber =0;
+            
+
+          }
+
         }
-        else if(p3->pinned == 0 && pri != 0){ //unpinned from queue 0
-          p3->pinned = pri;
-          ptable.queue[i][j] = p3;
+        else if(proc->pinned ==0 && pri !=0){
+          proc->pinned =pri;
+          //ptable.queue[proc->queueNumber][ptable.priCount[proc->queueNumber]] = proc;
         }
-        else{
-          p3->pinned = pri;
-          ptable.queue[i][j] = p3;
-        }
-        release(&ptable.lock);
-        return 0;
+        //ptable.queue[proc->queueNumber][ptable.priCount[proc->queueNumber]] = proc;
       }
-    }
-    if(found == 1)
-      break;
-  }
-  p3 =0;
   release(&ptable.lock);
-
-
-
 
   return 0;
 }

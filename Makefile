@@ -176,6 +176,7 @@ UPROGS=\
 	_test1\
 	_test2\
 	_test3\
+	_prioritytest\
 
 fs.img: mkfs README $(UPROGS)
 	./mkfs fs.img README $(UPROGS)

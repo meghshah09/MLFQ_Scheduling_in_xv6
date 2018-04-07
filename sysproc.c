@@ -119,8 +119,8 @@ int pid;
 		return 1;
 	}
 	//cprintf("priority : %d\n",priority);
-	setpriority(pid,priority);
-return 0;
+	
+return setpriority(pid,priority);
 }
 
 int sys_setrunningticks(void){
@@ -128,9 +128,9 @@ int sys_setrunningticks(void){
 	if(argint(0, &RUNNING_THRESHOLD)<0){
 		return 1;
 	}
-  setrunningticks(RUNNING_THRESHOLD);
+  
 	//cprintf("RUNNING_THRESHOLD : %d\n",RUNNING_THRESHOLD);
-	return 0;
+	return setrunningticks(RUNNING_THRESHOLD);
 }
 
 int sys_setwaitingticks(void){
@@ -139,7 +139,7 @@ int sys_setwaitingticks(void){
 	if(argint(0, &WAITING_THRESHOLD)<0){
 		return 1;
 	}
-  setwaitingticks(WAITING_THRESHOLD);
+  
 	//cprintf("WAITING_THRESHOLD : %d\n",WAITING_THRESHOLD);
-	return 0;
+	return setwaitingticks(WAITING_THRESHOLD);
 }
