@@ -118,7 +118,7 @@ int pid;
 	if(argint(1, &priority)<0){
 		return 1;
 	}
-	
+	//cprintf("priority : %d\n",priority);
 	setpriority(pid,priority);
 return 0;
 }

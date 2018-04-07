@@ -107,6 +107,9 @@ trap(struct trapframe *tf)
     yield();
 
   // Check if the process has been killed since we yielded
-  if(proc && proc->killed && (tf->cs&3) == DPL_USER)
-    exit();
+  if(proc && proc->killed && (tf->cs&3) == DPL_USER){
+  		cprintf("killed\n");
+  		exit();
+  }
+    
 }
