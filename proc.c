@@ -377,19 +377,29 @@ void MLFQscheduler(void){
 
               if(p->queueNumber == 0){
                 int i;
-                for (i = index; i < ptable.priCount[qNumber]; i++) {
-                    ptable.queue[qNumber][i] = ptable.queue[qNumber][i + 1];
+                for (i = index; i < ptable.priCount[0]; i++) {
+                    ptable.queue[0][i] = ptable.queue[0][i + 1];
                 }
                 ran=1;
-                ptable.priCount[qNumber]--;
+                ptable.priCount[0]--;
                 /*-------------------------- increasing waiting ticks for process in queue 1-------------*/
-                struct proc *p0; 
+                struct proc *p0=0; 
                 for(int k =0;k<=ptable.priCount[1];k++){
                     p0 = ptable.queue[1][k];
                     if(p0->state == RUNNABLE){
                       p0->waiting_ticks++;
                       p0->priority = p0->waiting_ticks;
                       ptable.queue[1][k] = p0;
+
+                      if(p0->waiting_ticks == WAITING_THRESHOLD ){
+                          ptable.priCount[p0->queueNumber]--;
+                          p0->queueNumber =0;
+                          p0->running_ticks =0;
+                          p0->waiting_ticks =0;
+                          p0->priority =0;
+                          ptable.priCount[p0->queueNumber]++;
+                          ptable.queue[0][ptable.priCount[0]] = p0;
+                      }
                     }
                 }
                 /*----------------------------------------------------------------------------------------*/
@@ -408,9 +418,11 @@ void MLFQscheduler(void){
                 swtch(&cpu->scheduler, proc->context);
                 
                 switchkvm();
+
+
                 
                 proc = 0;
-
+                qNumber =0;
               }
               else if(p->queueNumber == 1){
 
@@ -453,18 +465,7 @@ void MLFQscheduler(void){
                       //cprintf("PID :[%d] and Waiting ticks [%d]\n",p2->pid,p2->waiting_ticks);
                     }
                 }*/
-                 struct proc *p2=0;
-                 for(p2 = ptable.proc; p2 < &ptable.proc[NPROC]; p2++){
-                  if(p2->state != RUNNABLE && p2->queueNumber != 1)
-                    continue;
-                  else{
-                      if(p != p2){
-                        p2->waiting_ticks++;
-                        p2->priority = p2->waiting_ticks;
-                      }
-                    //cprintf("PID :[%d] and Wait[%d] , ",p2->pid,p2->waiting_ticks);  
-                  }
-                 }
+                 
 
                 ran=1;
                 proc =p;
@@ -479,17 +480,14 @@ void MLFQscheduler(void){
                 //printf("Scheduling done\n");
                 proc = 0;
                 p1=0;
-                p2=0;
+                //p2=0;
+                qNumber =0;
               }//else if end
 
 
             }
           
         }
-
-
-
-
 
     release(&ptable.lock);
     if (ran == 0){
@@ -532,7 +530,20 @@ sched(void)
   }
 
   if(proc->pid != 1 && proc->pid != 2 && proc->queueNumber == 1 && proc->pinned != 0){
+    struct proc *p2=0;
+      for(p2 = ptable.proc; p2 < &ptable.proc[NPROC]; p2++){
+        if(p2->state != RUNNABLE && p2->queueNumber != 1)
+          continue;
+        else{
+          if(proc != p2){
+            p2->waiting_ticks++;
+            p2->priority = p2->waiting_ticks;
+          }
 
+
+                    //cprintf("PID :[%d] and Wait[%d] , ",p2->pid,p2->waiting_ticks);  
+        }
+      }
   }
 
   if ( sched_trace_enabled && proc && proc->pid != 1 && proc->pid != 2){
@@ -550,8 +561,9 @@ yield(void)
 {
   //cprintf("Into yield.\n"); 
   acquire(&ptable.lock);  //DOC: yieldlock
-  if(proc->waiting_ticks == WAITING_THRESHOLD && proc->queueNumber==1){ //promotion to queue 0.
-    proc->priority =0;
+  if(proc->waiting_ticks == WAITING_THRESHOLD && proc->queueNumber == 1 && proc->pid !=1 && proc->pid!=2){ //promotion to queue 0.
+    //cprintf("Promoting process : %d\n",proc->pid);
+    //proc->priority =0;
     proc->waiting_ticks = 0;
     proc->running_ticks =0;
     proc->queueNumber = 0;
@@ -559,12 +571,14 @@ yield(void)
     //ptable.queue[0][ptable.priCount[0]]= proc;        
   }
 
+  
+
   if(proc->running_ticks == RUNNING_THRESHOLD && proc->queueNumber==0 && proc->pid !=1 && proc->pid!=2){ //Demotion
-    cprintf("Demoting process : %d\n",proc->pid);
+    //cprintf("Demoting process : %d\n",proc->pid);
     proc->priority = 0;
     proc->waiting_ticks =0;
     proc->running_ticks = 0;
-    proc->queueNumber =1;
+    proc->queueNumber = 1;
     //ptable.priCount[1]++;
     //ptable.queue[1][ptable.priCount[1]]= proc;
   }
@@ -743,7 +757,7 @@ int setpriority(int p_id, int pri){
         //cprintf("I found it\n");
         if(proc->pinned !=0 && pri ==0){
           if(proc->queueNumber ==0){
-
+            //cprintf("10\n");
             proc->pinned = pri;
             proc->running_ticks =0;
             proc->waiting_ticks = 0;
@@ -751,22 +765,24 @@ int setpriority(int p_id, int pri){
 
           }
           else if (proc->queueNumber == 1){
-            ptable.priCount[proc->queueNumber]--;
+            //ptable.priCount[proc->queueNumber]--;
             proc->pinned = pri;
             proc->running_ticks =0;
             proc->waiting_ticks = 0;
             proc->queueNumber =0;
-            
+            //cprintf("11\n");
 
           }
 
         }
         else if(proc->pinned ==0 && pri !=0){
           proc->pinned =pri;
+          //cprintf("12\n");
           //ptable.queue[proc->queueNumber][ptable.priCount[proc->queueNumber]] = proc;
         }
         //ptable.queue[proc->queueNumber][ptable.priCount[proc->queueNumber]] = proc;
       }
+
   release(&ptable.lock);
 
   return 0;
