@@ -16,7 +16,7 @@ int
 main(int argc, char * argv[])
 {
     printf(1, "BYE~\n");
-	setrunningticks(1000);
+	//setrunningticks(1000);
 	//setwaitingticks(4);
     shutdown();
     exit(); //return 0;

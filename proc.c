@@ -347,7 +347,7 @@ scheduler(void)
 
 //MLFQScheduler
 void MLFQscheduler(void){
-    cprintf("In MLFQ Scheduler\n");
+    //cprintf("In MLFQ Scheduler\n");
     int ran= 0;
     struct proc *p;
     int qNumber;
